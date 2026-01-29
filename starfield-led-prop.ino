@@ -38,8 +38,9 @@ MIDI_NAMESPACE::MidiInterface<MIDI_NAMESPACE::SerialMIDI<HardwareSerial, CustomB
 
 /* BEGIN NeoPXL8 Settings */
 
-#define NUM_LEDS    30     // NeoPixels PER STRAND, total number is 8X this!
+#define NUM_LEDS    896     // NeoPixels PER STRAND, total number is 8X this!
 #define COLOR_ORDER NEO_GRB // NeoPixel color format (see Adafruit_NeoPixel)
+#define LED_BLACK		0
 
 // Here's a pinout that works with the Feather M4 (not M0) w/NeoPXL8 M4
 // FeatherWing in the factory configuration:
@@ -62,8 +63,9 @@ static uint8_t colors[8][3] = {
 
 // Max is 255, 32 is a conservative value
 #define BRIGHTNESS 32
-
 /* END NeoPXL8 Settings */
+
+uint8_t animation = 0;
 
 // -----------------------------------------------------------------------------
 // This function will be automatically called when a NoteOn is received.
@@ -82,10 +84,14 @@ void handleNoteOn(byte channel, byte pitch, byte velocity)
     
     switch(pitch) {
       case NOTE_A0:
-        renderFrame();
+        animation = 0;
         break;
 
-      default:
+      case NOTE_B0:
+        animation = 1;
+        break;
+
+     default:
         break;
     }
   }
@@ -146,34 +152,55 @@ void setup()
 
 void loop()
 {
-    // Call MIDI.read the fastest you can for real-time performance.
+    // Call MIDI.read the fastest you can for real-time performance of MIDI thru.
     MIDI.read();
     // There is no need to check if there are messages incoming
     // if they are bound to a Callback function.
     // The attached method will be called automatically
     // when the corresponding message has been received.
+
+    // 
+    animate();
 }
 
-void renderFrame() {
-    // render each frame of a repeating animation cycle based on elapsed time:
-    uint32_t now = millis(); // Get time once at start of each frame
-    for(uint8_t r=0; r<8; r++) { // For each row...
-      for(int p=0; p<NUM_LEDS; p++) { // For each pixel of row...
-        leds.setPixelColor(r * NUM_LEDS + p, rain(now, r, p));
-      }
+void animate() {
+    switch(animation) {
+      case 0:
+        animateBlackout();
+        break;
+
+      case 1:
+        animateRain();
+        break;
+
+      default:
+        break;
     }
-    leds.show();
+}
+
+void animateBlackout() {
+  leds.clear();
+  leds.show();
+}
+
+void animateRain() {
+  uint32_t now = millis(); // Get time once at start of each frame
+  for(uint8_t r=0; r<8; r++) { // For each row...
+    for(int p=0; p<NUM_LEDS; p++) { // For each pixel of row...
+      leds.setPixelColor(r * NUM_LEDS + p, calcRain(now, r, p));
+    }
+  }
+  leds.show();
 }
 
 // Given current time in milliseconds, row number (0-7) and pixel number
 // along row (0 - (NUM_LEDS-1)), first calculate brightness (b) of pixel,
 // then multiply row color by this and run it through NeoPixel library’s
 // gamma-correction table.
-uint32_t rain(uint32_t now, uint8_t row, int pixelNum) {
+uint32_t calcRain(uint32_t now, uint8_t row, int pixelNum) {
   uint8_t frame = now / 4; // uint8_t rolls over for a 0-255 range
   uint16_t b = 256 - ((frame - row * 32 + pixelNum * 256 / NUM_LEDS) & 0xFF);
   return leds.Color(leds.gamma8((colors[row][0] * b) >> 8),
                     leds.gamma8((colors[row][1] * b) >> 8),
                     leds.gamma8((colors[row][2] * b) >> 8));
 }
-
