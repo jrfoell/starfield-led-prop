@@ -73,6 +73,12 @@ static uint8_t colors[8][3] = {
 #define BRIGHTNESS 32
 /* END NeoPXL8 Settings */
 
+/* BEGIN Star Twinkle Settings */
+#define STAR_MIN_BRIGHTNESS 10   // Minimum brightness when star is dimmest
+#define STAR_MAX_BRIGHTNESS 100  // Maximum brightness when star is brightest
+#define TWINKLE_SPEED 8          // Lower = faster twinkling (divisor for millis)
+/* END Star Twinkle Settings */
+
 uint8_t animation = 0;
 
 // https://www.shutterstock.com/image-vector/northern-hemisphere-high-detailed-star-map-2713195867
@@ -373,14 +379,20 @@ inline uint8_t fastCosineCalc( uint16_t preWrapVal) {
 }
 
 void animateStars() {
+  uint32_t now = millis();
   uint16_t pixel = 0;
-  for(int byte=0; byte<PIXEL_BYTES; byte++) { // For each pixel
-    unsigned char pixel_byte = starfield[byte];
+  for(int byte=0; byte<PIXEL_BYTES; byte++) { // For each byte in starfield
+    unsigned char pixel_byte = pgm_read_byte_near(starfield + byte);
     for(int bit=0; bit<8; bit++) {
       unsigned char bit_value = pixel_byte & 0x01;
       pixel_byte = pixel_byte >> 1;
       if(bit_value == 1) {
-        leds.setPixelColor(pixel, leds.Color(100, 100, 100));
+        // Calculate unique twinkle phase for this star based on pixel position
+        uint16_t phase = (now / TWINKLE_SPEED) + (pixel * 37); // 37 is prime for good distribution
+        uint8_t wave = fastCosineCalc(phase);
+        // Scale wave (0-255) to brightness range
+        uint8_t brightness = STAR_MIN_BRIGHTNESS + ((wave * (STAR_MAX_BRIGHTNESS - STAR_MIN_BRIGHTNESS)) >> 8);
+        leds.setPixelColor(pixel, leds.Color(brightness, brightness, brightness));
       } else {
         leds.setPixelColor(pixel, 0);
       }
