@@ -79,6 +79,21 @@ static uint8_t colors[8][3] = {
 
 uint8_t animation = 0;
 
+// Collapse animation state
+uint32_t collapseStartTime = 0;
+bool collapseInitialized = false;
+#define COLLAPSE_DURATION 2000  // Animation duration in ms
+
+// Explode animation state
+uint32_t explodeStartTime = 0;
+bool explodeInitialized = false;
+#define EXPLODE_DURATION 2000  // Animation duration in ms
+
+// Scatter animation state
+uint32_t scatterStartTime = 0;
+bool scatterInitialized = false;
+#define SCATTER_DURATION 2000  // Animation duration in ms
+
 // Gimp: greyscale image 56x80px
 // Convert via local fork of image2cpp file:///Users/mbiwinds/Documents/Arduino/image2cpp/index.html
 // Background: Black, Brightness threshold: 10, Rotate: 90, Draw Mode: Horizontal, Swap Bits: YES, ZigZag: YES
@@ -162,6 +177,45 @@ const unsigned char panel_setup [] PROGMEM = {
 	0x00, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80
 };
 
+// 'outer-wilds-star-80x56', 56x80px
+const unsigned char outer_wilds [] PROGMEM = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x40, 0x00, 0x00, 0x06, 
+	0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x30, 0x00, 0x00, 0x18, 0x00, 0x10, 
+	0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00, 0x0c, 0x00, 0x00, 0x60, 0x00, 0x10, 0x00, 0x18, 
+	0x00, 0x00, 0x30, 0x00, 0x0c, 0x00, 0x07, 0x00, 0x00, 0xc0, 0x00, 0x3c, 0x00, 0x06, 0x00, 0x00, 
+	0xc0, 0x80, 0x3c, 0x80, 0x01, 0x00, 0x00, 0x00, 0x23, 0x3c, 0x81, 0x01, 0x00, 0x00, 0x00, 0x83, 
+	0x3f, 0x66, 0x00, 0x00, 0x00, 0x00, 0x6c, 0xfc, 0xf9, 0x00, 0x00, 0x00, 0x40, 0xbe, 0x7f, 0x1b, 
+	0x00, 0x00, 0x00, 0x00, 0xb8, 0xff, 0x3f, 0x03, 0x00, 0x00, 0x80, 0xf9, 0xff, 0x0f, 0x00, 0x00, 
+	0x00, 0x80, 0xe1, 0xff, 0xff, 0x00, 0x00, 0x00, 0x3c, 0xfe, 0xff, 0xf3, 0x00, 0x00, 0x00, 0x00, 
+	0xfc, 0xff, 0xbf, 0x0f, 0x00, 0x00, 0x80, 0xff, 0xff, 0x3f, 0x00, 0x00, 0x00, 0x00, 0xfc, 0xff, 
+	0xff, 0x01, 0x00, 0xfc, 0xff, 0xff, 0xe1, 0x0f, 0x00, 0x00, 0x80, 0xff, 0xff, 0x87, 0xff, 0xff, 
+	0x3f, 0x00, 0xc0, 0xff, 0xe1, 0xff, 0x03, 0x00, 0x00, 0xc0, 0xfb, 0xc7, 0xff, 0x01, 0x00, 0x00, 
+	0xe0, 0xff, 0xff, 0x3f, 0x00, 0x00, 0x00, 0x00, 0xfe, 0xff, 0xff, 0x00, 0x00, 0x00, 0xc0, 0xfb, 
+	0xff, 0xef, 0x01, 0x00, 0x00, 0xe0, 0xf1, 0xff, 0x3f, 0x07, 0x00, 0x00, 0x78, 0xee, 0xff, 0x1f, 
+	0x1e, 0x00, 0x00, 0x1e, 0xec, 0xff, 0xe3, 0x38, 0x00, 0x00, 0x86, 0xe3, 0xff, 0x6f, 0xe0, 0x01, 
+	0xc0, 0x01, 0x38, 0xff, 0x87, 0x03, 0x00, 0x00, 0xe0, 0xa0, 0x9e, 0x19, 0x00, 0x0e, 0x1c, 0x00, 
+	0x8c, 0x7d, 0x00, 0x0e, 0x00, 0x00, 0x30, 0x00, 0x3e, 0x63, 0x00, 0xe0, 0x01, 0x00, 0xc6, 0x74, 
+	0x00, 0x18, 0x00, 0x00, 0x0c, 0x00, 0x0e, 0xc6, 0x00, 0x00, 0x00, 0x80, 0x61, 0x70, 0x00, 0x60, 
+	0x00, 0x00, 0x03, 0x00, 0x0e, 0x0c, 0x01, 0x00, 0x00, 0x00, 0x30, 0x70, 0x00, 0x80, 0x01, 0xc0, 
+	0x00, 0x00, 0x0c, 0x18, 0x00, 0x00, 0x00, 0x00, 0x08, 0x30, 0x00, 0x00, 0x06, 0x30, 0x00, 0x00, 
+	0x0c, 0x30, 0x00, 0x00, 0x00, 0x00, 0x04, 0x20, 0x00, 0x00, 0x18, 0x0c, 0x00, 0x00, 0x04, 0x60, 
+	0x00, 0x00, 0x00, 0x00, 0x02, 0x20, 0x00, 0x00, 0x60, 0x03, 0x00, 0x00, 0x04, 0xc0, 0x00, 0x00, 
+	0x00, 0x00, 0x01, 0x20, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x04, 0x80, 0x01, 0x00, 0x00, 0x00, 
+	0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
 //Byte val 2PI Cosine Wave, offset by 1 PI
 //supports fast trig calcs and smooth LED fading/pulsing.
 static const uint8_t PROGMEM cos_wave[256]  =
@@ -210,33 +264,41 @@ void handleNoteOn(byte channel, byte pitch, byte velocity)
         break;
 
       case NOTE_F0:
-        Serial.println("Collapse");
+        Serial.println("These");
         animation = 3;
         break;
 
       case NOTE_G0:
-        Serial.println("Explode");
+        Serial.println("Collapse");
+        collapseInitialized = false;  // Reset animation state
         animation = 4;
         break;
 
       case NOTE_A0:
-        Serial.println("Scatter");
+        Serial.println("Explode");
+        explodeInitialized = false;  // Reset animation state
         animation = 5;
         break;
 
       case NOTE_B0:
-        Serial.println("Constellation");
+        Serial.println("Scatter");
+        scatterInitialized = false;  // Reset animation state
         animation = 6;
+        break;
+
+      case NOTE_C1:
+        Serial.println("Constellation");
+        animation = 7;
         break;
 
       case NOTE_A1:
         Serial.println("Rain");
-        animation = 7;
+        animation = 8;
         break;
 
       case NOTE_B1:
         Serial.println("Plasma");
-        animation = 8;
+        animation = 9;
         break;
 
 
@@ -261,26 +323,30 @@ void animate() {
         break;
 
       case 3:
-        animateCollapse();
+        animateThese();
         break;
 
       case 4:
-        animateExplode();
+        animateCollapse();
         break;
 
       case 5:
-        animateScatter();
+        animateExplode();
         break;
 
       case 6:
-        animateConstellation();
+        animateScatter();
         break;
 
       case 7:
-        animateRain();
+        animateConstellation();
         break;
 
       case 8:
+        animateRain();
+        break;
+
+      case 9:
         animatePlasma();
         break;
 
@@ -358,6 +424,21 @@ inline uint8_t fastCosineCalc( uint16_t preWrapVal) {
   return (pgm_read_byte_near(cos_wave + (preWrapVal & 255)));
 }
 
+// Convert (column, visual row) to pixel index, accounting for zigzag wiring
+// Visual row 0 = top, row 55 = bottom
+uint16_t getPixelIndex(uint8_t col, uint8_t row) {
+  // Each column has PANEL_HEIGHT (56) pixels
+  // Odd columns: pixel 0 is at bottom (row 55), pixel 55 is at top (row 0)
+  // Even columns: pixel 0 is at top (row 0), pixel 55 is at bottom (row 55) - reversed
+  if (col & 1) {
+    // Odd column - reversed, so visual row 0 (top) maps to pixel index 55
+    return col * PANEL_HEIGHT + (PANEL_HEIGHT - 1 - row);
+  } else {
+    // Even column - normal order, visual row maps directly to pixel index
+    return col * PANEL_HEIGHT + row;
+  }
+}
+
 void animateBlackout() {
   leds.clear();
   leds.show();
@@ -405,16 +486,210 @@ void animateStars() {
   leds.show();
 }
 
-void animateCollapse() {
+void animateThese() {
+  uint32_t now = millis();
+  
+  // Calculate synchronized pulse phase (all pixels same phase)
+  uint16_t phase = now / TWINKLE_SPEED;
+  uint8_t wave = fastCosineCalc(phase);
+  
+  // Scale wave (0-255) to 50%-100% brightness range (128-255)
+  uint8_t brightness = 128 + (wave >> 1);  // 128 + (0-127) = 128-255
+  
+  uint16_t pixel = 0;
+  for(int byte=0; byte<PIXEL_BYTES; byte++) {
+    unsigned char pixel_byte = pgm_read_byte_near(starfield + byte);
+    for(int bit=0; bit<8; bit++) {
+      unsigned char bit_value = pixel_byte & 0x01;
+      pixel_byte = pixel_byte >> 1;
+      if(bit_value == 1) {
+        leds.setPixelColor(pixel, leds.Color(brightness, brightness, brightness));
+      } else {
+        leds.setPixelColor(pixel, 0);
+      }
+      pixel++;
+    }
+  }
+  leds.show();
+}
 
+void animateCollapse() {
+  uint32_t now = millis();
+  
+  // Initialize animation on first call
+  if (!collapseInitialized) {
+    collapseStartTime = now;
+    collapseInitialized = true;
+  }
+  
+  // Calculate animation progress (0.0 to 1.0, clamped)
+  uint32_t elapsed = now - collapseStartTime;
+  float progress = (float)elapsed / COLLAPSE_DURATION;
+  if (progress > 1.0f) progress = 1.0f;
+  
+  // Clear all pixels first
+  leds.clear();
+  
+  // Process each column
+  for (uint8_t col = 0; col < FULL_WIDTH; col++) {
+    // First pass: collect all lit star positions in this column
+    uint8_t starRows[PANEL_HEIGHT];  // Original row positions of stars
+    uint8_t starCount = 0;
+    
+    // Read the column from starfield bitmap
+    // Data is column-major: column c starts at byte c * 7
+    uint16_t byteOffset = col * 7;
+    
+    for (uint8_t row = 0; row < PANEL_HEIGHT; row++) {
+      uint8_t byteIdx = row / 8;
+      uint8_t bitIdx = row % 8;
+      uint8_t pixel_byte = pgm_read_byte_near(starfield + byteOffset + byteIdx);
+      
+      if (pixel_byte & (1 << bitIdx)) {
+        // This star is lit - record its original position
+        starRows[starCount] = row;
+        starCount++;
+      }
+    }
+    
+    // Second pass: calculate target positions and animate
+    // Phase 1: Stars collapse toward bottom, stacking from row 0
+    // Phase 2: All stars converge to row 0 (single star per column)
+    for (uint8_t i = 0; i < starCount; i++) {
+      uint8_t originalRow = starRows[i];
+      uint8_t currentRow;
+      
+      if (progress <= 0.5f) {
+        // Phase 1: stack at top (star i goes to row i)
+        float phase1Progress = progress * 2.0f;  // Scale 0-0.5 to 0-1
+        currentRow = (uint8_t)(originalRow + (i - originalRow) * phase1Progress + 0.5f);
+      } else {
+        // Phase 2: all converge to row 0
+        float phase2Progress = (progress - 0.5f) * 2.0f;  // Scale 0.5-1 to 0-1
+        currentRow = (uint8_t)(i * (1.0f - phase2Progress) + 0.5f);
+      }
+      
+      // Get pixel index accounting for zigzag wiring
+      uint16_t pixelIdx = getPixelIndex(col, currentRow);
+      
+      // Set pixel with twinkling brightness
+      uint16_t phase = (now / TWINKLE_SPEED) + (pixelIdx * 37);
+      uint8_t wave = fastCosineCalc(phase);
+      uint8_t brightness = STAR_MIN_BRIGHTNESS + ((wave * (STAR_MAX_BRIGHTNESS - STAR_MIN_BRIGHTNESS)) >> 8);
+      leds.setPixelColor(pixelIdx, leds.Color(brightness, brightness, brightness));
+    }
+  }
+  
+  leds.show();
 }
 
 void animateExplode() {
-
+  uint32_t now = millis();
+  
+  if (!explodeInitialized) {
+    explodeStartTime = now;
+    explodeInitialized = true;
+  }
+  
+  uint32_t elapsed = now - explodeStartTime;
+  float progress = (float)elapsed / EXPLODE_DURATION;
+  if (progress > 1.0f) progress = 1.0f;
+  
+  // Center of display
+  const float centerCol = FULL_WIDTH / 2.0f;   // 40
+  const float centerRow = PANEL_HEIGHT / 2.0f; // 28
+  
+  // Max distance (corner to center)
+  const float maxDist = sqrt(centerCol * centerCol + centerRow * centerRow);
+  
+  // Current reveal radius
+  float revealRadius = progress * maxDist;
+  
+  leds.clear();
+  
+  for (uint8_t col = 0; col < FULL_WIDTH; col++) {
+    uint16_t byteOffset = col * 7;
+    
+    for (uint8_t row = 0; row < PANEL_HEIGHT; row++) {
+      uint8_t byteIdx = row / 8;
+      uint8_t bitIdx = row % 8;
+      uint8_t pixel_byte = pgm_read_byte_near(outer_wilds + byteOffset + byteIdx);
+      
+      if (pixel_byte & (1 << bitIdx)) {
+        // Calculate distance from center
+        float dx = col - centerCol;
+        float dy = row - centerRow;
+        float dist = sqrt(dx * dx + dy * dy);
+        
+        // Only show pixel if within reveal radius
+        if (dist <= revealRadius) {
+          uint16_t pixelIdx = getPixelIndex(col, row);
+          
+          // Twinkling brightness
+          uint16_t phase = (now / TWINKLE_SPEED) + (pixelIdx * 37);
+          uint8_t wave = fastCosineCalc(phase);
+          uint8_t brightness = STAR_MIN_BRIGHTNESS + ((wave * (STAR_MAX_BRIGHTNESS - STAR_MIN_BRIGHTNESS)) >> 8);
+          leds.setPixelColor(pixelIdx, leds.Color(brightness, brightness, brightness));
+        }
+      }
+    }
+  }
+  
+  leds.show();
 }
 
 void animateScatter() {
-
+  uint32_t now = millis();
+  
+  if (!scatterInitialized) {
+    scatterStartTime = now;
+    scatterInitialized = true;
+  }
+  
+  uint32_t elapsed = now - scatterStartTime;
+  float progress = (float)elapsed / SCATTER_DURATION;
+  if (progress > 1.0f) progress = 1.0f;
+  
+  leds.clear();
+  
+  for (uint8_t col = 0; col < FULL_WIDTH; col++) {
+    uint16_t byteOffset = col * 7;
+    
+    for (uint8_t row = 0; row < PANEL_HEIGHT; row++) {
+      uint8_t byteIdx = row / 8;
+      uint8_t bitIdx = row % 8;
+      
+      uint8_t outerByte = pgm_read_byte_near(outer_wilds + byteOffset + byteIdx);
+      uint8_t starByte = pgm_read_byte_near(starfield + byteOffset + byteIdx);
+      
+      bool inOuter = outerByte & (1 << bitIdx);
+      bool inStar = starByte & (1 << bitIdx);
+      
+      if (inOuter || inStar) {
+        uint16_t pixelIdx = getPixelIndex(col, row);
+        uint8_t brightness;
+        
+        if (inOuter && inStar) {
+          // Present in both - full twinkling brightness
+          uint16_t phase = (now / TWINKLE_SPEED) + (pixelIdx * 37);
+          uint8_t wave = fastCosineCalc(phase);
+          brightness = STAR_MIN_BRIGHTNESS + ((wave * (STAR_MAX_BRIGHTNESS - STAR_MIN_BRIGHTNESS)) >> 8);
+        } else if (inOuter) {
+          // Only in outer_wilds - fade out
+          brightness = (uint8_t)(STAR_MAX_BRIGHTNESS * (1.0f - progress));
+        } else {
+          // Only in starfield - fade in
+          brightness = (uint8_t)(STAR_MAX_BRIGHTNESS * progress);
+        }
+        
+        if (brightness > 0) {
+          leds.setPixelColor(pixelIdx, leds.Color(brightness, brightness, brightness));
+        }
+      }
+    }
+  }
+  
+  leds.show();
 }
 
 void animateConstellation() {
