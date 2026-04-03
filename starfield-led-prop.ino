@@ -107,12 +107,17 @@ bool constellationInitialized = false;
 // Rising animation state
 uint32_t risingStartTime = 0;
 bool risingInitialized = false;
-#define RISING_DURATION 8000  // Animation duration in ms
+#define RISING_DURATION 10000  // Animation duration in ms
 
 // Dipper animation state
 uint32_t dipperStartTime = 0;
 bool dipperInitialized = false;
-#define DIPPER_DURATION 20000  // Total animation duration in ms (20 seconds)
+#define DIPPER_DURATION 22000  // Total animation duration in ms (20 seconds)
+
+// Aurora animation state
+uint32_t auroraStartTime = 0;
+bool auroraInitialized = false;
+#define AURORA_FADE_IN_MS 3500  // Ramp from black to full brightness
 
 // Gimp: greyscale image 56x80px
 // Convert via local fork of image2cpp file:///Users/mbiwinds/Documents/Arduino/image2cpp/index.html
@@ -556,6 +561,12 @@ void handleNoteOn(byte channel, byte pitch, byte velocity)
         animation = 9;
         break;
 
+        case NOTE_F1:
+        //Serial.println("Aurora");
+        auroraInitialized = false;
+        animation = 10;
+        break;
+
       case NOTE_A1:
         //Serial.println("Rain");
         animation = 13;
@@ -613,6 +624,10 @@ void animate() {
 
       case 9:
         animateDipper();
+        break;
+
+      case 10:
+        animateAurora();
         break;
 
       case 13:
@@ -1056,42 +1071,56 @@ void animateConstellation() {
 
 void animateRising() {
   uint32_t now = millis();
-  
+
   if (!risingInitialized) {
     risingStartTime = now;
     risingInitialized = true;
   }
-  
+
   uint32_t elapsed = now - risingStartTime;
   float progress = (float)elapsed / RISING_DURATION;
   if (progress > 1.0f) progress = 1.0f;
-  
-  // Calculate how many rows to reveal from bottom (PANEL_HEIGHT-1 down to 0)
-  // At progress 0: revealedRows = 0 (nothing shown)
-  // At progress 1: revealedRows = PANEL_HEIGHT (all rows shown)
+
+  // Reveal pixels from bottom to top
+  // Since zigzag is baked into the bitmap, we reveal by pixel index within each column
+  // Even columns: high pixel indices are at bottom, so reveal from high to low
+  // Odd columns: low pixel indices are at bottom, so reveal from low to high
   uint8_t revealedRows = (uint8_t)(progress * PANEL_HEIGHT);
-  
+
   leds.clear();
-  
-  for (uint8_t col = 0; col < FULL_WIDTH; col++) {
-    uint16_t byteOffset = col * 7;
-    
-    // Only render rows from 0 to (revealedRows - 1), starting from top of bitmap
-    // Since row 0 is visual top, we reveal row 0 first (which appears at bottom visually)
-    for (uint8_t row = 0; row < revealedRows; row++) {
-      uint8_t byteIdx = row / 8;
-      uint8_t bitIdx = row % 8;
-      uint8_t pixel_byte = pgm_read_byte_near(starfield + byteOffset + byteIdx);
+
+  uint16_t pixel = 0;
+  for (int byteNum = 0; byteNum < PIXEL_BYTES; byteNum++) {
+    unsigned char pixel_byte = pgm_read_byte_near(starfield + byteNum);
+    for (int bit = 0; bit < 8; bit++) {
+      unsigned char bit_value = pixel_byte & 0x01;
+      pixel_byte = pixel_byte >> 1;
       
-      if (pixel_byte & (1 << bitIdx)) {
-        uint16_t pixelIdx = getPixelIndex(col, row);
+      if (bit_value == 1) {
+        // Determine column and position within column
+        uint8_t col = pixel / PANEL_HEIGHT;
+        uint8_t posInCol = pixel % PANEL_HEIGHT;
         
-        // Twinkling brightness
-        uint16_t phase = (now / TWINKLE_SPEED) + (pixelIdx * 37);
-        uint8_t wave = fastCosineCalc(phase);
-        uint8_t brightness = STAR_MIN_BRIGHTNESS + ((wave * (STAR_MAX_BRIGHTNESS - STAR_MIN_BRIGHTNESS)) >> 8);
-        leds.setPixelColor(pixelIdx, leds.Color(brightness, brightness, brightness));
+        // Calculate visual row from bottom (0 = bottom, 55 = top)
+        uint8_t visualRowFromBottom;
+        if (col & 1) {
+          // Odd column: pixel 0 is at bottom
+          visualRowFromBottom = posInCol;
+        } else {
+          // Even column: pixel 55 is at bottom
+          visualRowFromBottom = PANEL_HEIGHT - 1 - posInCol;
+        }
+        
+        // Only show if this row has been revealed from bottom
+        if (visualRowFromBottom < revealedRows) {
+          // Twinkling brightness
+          uint16_t phase = (now / TWINKLE_SPEED) + (pixel * 37);
+          uint8_t wave = fastCosineCalc(phase);
+          uint8_t brightness = STAR_MIN_BRIGHTNESS + ((wave * (STAR_MAX_BRIGHTNESS - STAR_MIN_BRIGHTNESS)) >> 8);
+          leds.setPixelColor(pixel, leds.Color(brightness, brightness, brightness));
+        }
       }
+      pixel++;
     }
   }
   
@@ -1112,9 +1141,9 @@ void animateDipper() {
   
   // 4 phases over 20 seconds total:
   // Phase 1: 0.00-0.05 (1 sec) - Show dipper_star1
-  // Phase 2: 0.05-0.50 (9 sec) - Draw dipper_line1 bottom to top
-  // Phase 3: 0.50-0.55 (1 sec) - Show dipper_star2
-  // Phase 4: 0.55-1.00 (9 sec) - Draw dipper_line2 right to left
+  // Phase 2: 0.05-0.30 (5 sec) - Draw dipper_line1 bottom to top
+  // Phase 3: 0.30-0.35 (1 sec) - Show dipper_star2
+  // Phase 4: 0.35-1.00 (13 sec) - Draw dipper_line2 right to left
 
   leds.clear();
 
@@ -1136,7 +1165,7 @@ void animateDipper() {
 
   // Phase 2: Render dipper_line1 from bottom to top
   if (progress >= 0.05f) {
-    float phase2Progress = (progress - 0.05f) / 0.45f;
+    float phase2Progress = (progress - 0.05f) / 0.25f;  // 5/20 = 0.25
     if (phase2Progress > 1.0f) phase2Progress = 1.0f;
 
     // Collect lit pixel indices per column, respecting zigzag for consistent bottom-to-top order
@@ -1187,7 +1216,7 @@ void animateDipper() {
   }
 
   // Phase 3: Render dipper_star2 (instant, full brightness)
-  if (progress >= 0.50f) {
+  if (progress >= 0.30f) {
     for (uint8_t col = 0; col < FULL_WIDTH; col++) {
       uint16_t byteOffset = col * 7;
       for (uint8_t row = 0; row < PANEL_HEIGHT; row++) {
@@ -1203,8 +1232,8 @@ void animateDipper() {
   }
 
   // Phase 4: Render dipper_line2 from right to left
-  if (progress >= 0.55f) {
-    float phase4Progress = (progress - 0.55f) / 0.45f;
+  if (progress >= 0.35f) {
+    float phase4Progress = (progress - 0.35f) / 0.65f;  // 13/20 = 0.65
     if (phase4Progress > 1.0f) phase4Progress = 1.0f;
 
     // Reveal columns from right (high col numbers) to left (low col numbers)
@@ -1229,6 +1258,67 @@ void animateDipper() {
     }
   }
   
+  leds.show();
+}
+
+void animateAurora() {
+  // Column-major zigzag wiring: visual row 0 = top (same as getPixelIndex / explode)
+  uint32_t now = millis();
+
+  if (!auroraInitialized) {
+    auroraStartTime = now;
+    auroraInitialized = true;
+  }
+
+  uint32_t auroraElapsed = now - auroraStartTime;
+  uint16_t fade256 = 256;
+  if (auroraElapsed < AURORA_FADE_IN_MS) {
+    fade256 = (uint16_t)((auroraElapsed * 256UL) / AURORA_FADE_IN_MS);
+  }
+
+  // Slower drift (larger divisors = slower motion)
+  uint16_t t = now / 32;
+  uint16_t t2 = now / 19;
+  uint16_t t3 = now / 44;
+
+  for (uint8_t row = 0; row < PANEL_HEIGHT; row++) {
+    for (uint8_t col = 0; col < FULL_WIDTH; col++) {
+      uint16_t pixelIdx = getPixelIndex(col, row);
+
+      // Curtain sheets: slow horizontal drift + vertical bands (multiple layers)
+      uint8_t sheet1 = fastCosineCalc((col << 2) + (t >> 1) + fastCosineCalc((row << 2) + (t3 >> 1)));
+      uint8_t sheet2 = fastCosineCalc(row * 3 + (t2 >> 1) + fastCosineCalc(col * 3 + t));
+      uint8_t sheet3 = fastCosineCalc(col * 7 + row * 11 + t2 + fastCosineCalc(col + row * 13 + t3));
+
+      // Mix weights → magenta, pink, neon green
+      uint8_t wM = (uint8_t)(((uint16_t)sheet1 * sheet2) >> 9);
+      uint8_t wP = (uint8_t)(((uint16_t)sheet2 * sheet3) >> 9);
+      uint8_t wG = (uint8_t)(((uint16_t)sheet3 * sheet1) >> 9);
+      uint16_t sum = (uint16_t)wM + wP + wG + 1u;
+
+      // Magenta ~ (220,0,255), pink ~(255,90,200), neon green ~(40,255,90)
+      uint8_t r = (uint8_t)((220UL * wM + 255UL * wP + 40UL * wG) / sum);
+      uint8_t g = (uint8_t)((0UL * wM + 90UL * wP + 255UL * wG) / sum);
+      uint8_t b = (uint8_t)((255UL * wM + 200UL * wP + 90UL * wG) / sum);
+
+      // Stronger toward top (aurora band); dim toward bottom
+      uint8_t altitude = 55 + ((PANEL_HEIGHT - row) * 200 / PANEL_HEIGHT);
+      uint8_t band = fastCosineCalc(row * 4 + (t >> 2));
+      uint16_t bright = ((uint16_t)altitude * ((uint16_t)sheet1 + sheet2 + 130)) >> 8;
+      bright = (bright * (180 + (band >> 1))) >> 8;
+      if (bright > 255) bright = 255;
+
+      r = (uint8_t)(((uint16_t)r * bright) >> 8);
+      g = (uint8_t)(((uint16_t)g * bright) >> 8);
+      b = (uint8_t)(((uint16_t)b * bright) >> 8);
+
+      r = (uint8_t)(((uint16_t)r * fade256) >> 8);
+      g = (uint8_t)(((uint16_t)g * fade256) >> 8);
+      b = (uint8_t)(((uint16_t)b * fade256) >> 8);
+
+      leds.setPixelColor(pixelIdx, leds.gamma32(((uint32_t)r << 16) | ((uint32_t)g << 8) | b));
+    }
+  }
   leds.show();
 }
 
