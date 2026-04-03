@@ -571,7 +571,7 @@ void handleNoteOn(byte channel, byte pitch, byte velocity)
         break;
 
       case NOTE_A0:
-        Serial.println("Explode");
+        //Serial.println("Explode");
         explodeInitialized = false;  // Reset animation state
         animation = 5;
         break;
@@ -1183,6 +1183,7 @@ void animateDipper() {
   // Phase 2: 0.05-0.30 (5 sec) - Draw dipper_line1 bottom to top
   // Phase 3: 0.30-0.35 (1 sec) - Show dipper_star2
   // Phase 4: 0.35-1.00 (13 sec) - Draw dipper_line2 right to left
+  // When progress hits 1.0 (line2 fully drawn): dipper_star3 at full brightness
 
   leds.clear();
 
@@ -1292,6 +1293,22 @@ void animateDipper() {
           uint8_t wave = fastCosineCalc(phase);
           uint8_t brightness = STAR_MIN_BRIGHTNESS + ((wave * (STAR_MAX_BRIGHTNESS - STAR_MIN_BRIGHTNESS)) >> 8);
           leds.setPixelColor(pixelIdx, leds.Color(brightness, brightness, brightness));
+        }
+      }
+    }
+  }
+
+  // dipper_star3: same timing boundary as end of phase 4 (no extra duration)
+  if (progress >= 1.0f) {
+    for (uint8_t col = 0; col < FULL_WIDTH; col++) {
+      uint16_t byteOffset = col * 7;
+      for (uint8_t row = 0; row < PANEL_HEIGHT; row++) {
+        uint8_t byteIdx = row / 8;
+        uint8_t bitIdx = row % 8;
+        uint8_t pixel_byte = pgm_read_byte_near(dipper_star3 + byteOffset + byteIdx);
+        if (pixel_byte & (1 << bitIdx)) {
+          uint16_t pixelIdx = col * PANEL_HEIGHT + row;
+          leds.setPixelColor(pixelIdx, leds.Color(255, 255, 255));
         }
       }
     }
