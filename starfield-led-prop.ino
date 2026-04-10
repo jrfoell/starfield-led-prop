@@ -109,6 +109,13 @@ uint32_t risingStartTime = 0;
 bool risingInitialized = false;
 #define RISING_DURATION 10000  // Animation duration in ms
 
+// animateThese: one-shot pulse between min and max brightness, then hold at min
+uint32_t thesePulseStartTime = 0;
+bool thesePulseInitialized = false;
+#define THESE_PULSE_DURATION_MS 2000  // Full up-and-down once
+#define THESE_PULSE_MIN_BRIGHTNESS 64   // ~25% of 255 (floor / resting level)
+#define THESE_PULSE_MAX_BRIGHTNESS 255
+
 // Dipper animation state
 uint32_t dipperStartTime = 0;
 bool dipperInitialized = false;
@@ -561,6 +568,7 @@ void handleNoteOn(byte channel, byte pitch, byte velocity)
 
       case NOTE_F0:
         //Serial.println("These");
+        thesePulseInitialized = false;
         animation = 3;
         break;
 
@@ -852,14 +860,27 @@ void animateStars() {
 
 void animateThese() {
   uint32_t now = millis();
-  
-  // Calculate synchronized pulse phase (all pixels same phase)
-  uint16_t phase = now / TWINKLE_SPEED;
-  uint8_t wave = fastCosineCalc(phase);
-  
-  // Scale wave (0-255) to 50%-100% brightness range (128-255)
-  uint8_t brightness = 128 + (wave >> 1);  // 128 + (0-127) = 128-255
-  
+
+  if (!thesePulseInitialized) {
+    thesePulseStartTime = now;
+    thesePulseInitialized = true;
+  }
+
+  uint32_t elapsed = now - thesePulseStartTime;
+  uint8_t brightness;
+
+  if (elapsed >= THESE_PULSE_DURATION_MS) {
+    brightness = THESE_PULSE_MIN_BRIGHTNESS;
+  } else {
+    // Map elapsed to t in 0..255; parabola t*(255-t) peaks at centre -> one up/down bump
+    uint16_t t = (uint16_t)((elapsed * 256UL) / THESE_PULSE_DURATION_MS);
+    if (t > 255) t = 255;
+    uint16_t par = (uint16_t)t * (255 - (uint16_t)t);
+    uint8_t add = (uint8_t)((par * 127UL) / 16256);  // 16256 = 127*128 (peak); add 0..127
+    uint8_t span = THESE_PULSE_MAX_BRIGHTNESS - THESE_PULSE_MIN_BRIGHTNESS;
+    brightness = THESE_PULSE_MIN_BRIGHTNESS + (uint8_t)(((uint16_t)add * span) / 127);
+  }
+
   uint16_t pixel = 0;
   for(int byte=0; byte<PIXEL_BYTES; byte++) {
     unsigned char pixel_byte = pgm_read_byte_near(starfield + byte);
@@ -1356,14 +1377,25 @@ void animateAurora() {
 
       // Vertical envelope: brightest at bottom row, soft falloff upward (low winter aurora)
       const uint8_t curtainRows = 26;  // main luminous band height from bottom
-      uint16_t verticalMask = 0;
+      // Wisp computed for all rows so the blend zone has a continuous value at the boundary
+      uint8_t wisp = fastCosineCalc(row * 4 + col * 3 + (t2 >> 2));
+      uint16_t wispMask = ((uint16_t)wisp * (uint16_t)(PANEL_HEIGHT - distFromBottom)) / (PANEL_HEIGHT + 30);
+      uint16_t verticalMask;
       if (distFromBottom < curtainRows) {
-        verticalMask = ((uint16_t)255 * (curtainRows - distFromBottom)) / curtainRows;
-        verticalMask = (verticalMask * verticalMask) / 255;  // smooth top edge of curtain
+        uint16_t inner = ((uint16_t)255 * (curtainRows - distFromBottom)) / curtainRows;
+        inner = (inner * inner) / 255;  // quadratic fade within curtain band
+        // Blend the top 10 rows of the curtain into the wisp formula so the edge
+        // is continuous rather than a hard line.
+        const uint8_t blendZone = 10;
+        if (distFromBottom >= curtainRows - blendZone) {
+          uint8_t blend = (uint8_t)(((uint32_t)(distFromBottom - (curtainRows - blendZone)) * 255) / (blendZone - 1));
+          verticalMask = ((uint32_t)inner * (255 - blend) + (uint32_t)wispMask * blend) >> 8;
+        } else {
+          verticalMask = inner;
+        }
       } else {
         // faint veil above the main curtain
-        uint8_t wisp = fastCosineCalc(row * 4 + col * 3 + (t2 >> 2));
-        verticalMask = ((uint16_t)wisp * (uint16_t)(PANEL_HEIGHT - distFromBottom)) / (PANEL_HEIGHT + 30);
+        verticalMask = wispMask;
       }
 
       // Push the bright band slightly up/down per column so the curtain "waves"
