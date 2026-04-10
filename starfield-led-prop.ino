@@ -75,6 +75,7 @@ static uint8_t colors[8][3] = {
 #define STAR_MIN_BRIGHTNESS 10   // Minimum brightness when star is dimmest
 #define STAR_MAX_BRIGHTNESS 100  // Maximum brightness when star is brightest
 #define TWINKLE_SPEED 8          // Lower = faster twinkling (divisor for millis)
+#define STARS_FADE_IN_MS 3500    // Ramp-up duration for starfield fade-in (animateStars + animateDipper background)
 /* END Star Twinkle Settings */
 
 uint8_t animation = 0;
@@ -119,7 +120,10 @@ bool thesePulseInitialized = false;
 // Dipper animation state
 uint32_t dipperStartTime = 0;
 bool dipperInitialized = false;
-#define DIPPER_DURATION 22000  // Total animation duration in ms (20 seconds)
+#define DIPPER_DURATION 22000       // Total animation duration in ms (20 seconds)
+#define DIPPER_BG_STAR_INTERVAL 8  // Light every Nth lit pixel from the starfield
+#define DIPPER_BG_MIN_BRIGHTNESS 3  // ~1% of 255
+#define DIPPER_BG_MAX_BRIGHTNESS 26 // ~10% of 255
 
 // Aurora animation state
 uint32_t auroraStartTime = 0;
@@ -1207,6 +1211,33 @@ void animateDipper() {
   // When progress hits 1.0 (line2 fully drawn): dipper_star3 at full brightness
 
   leds.clear();
+
+  // Background: every Nth lit pixel from the starfield, twinkling at 1-10% brightness,
+  // fading in over STARS_FADE_IN_MS from the moment the animation starts.
+  {
+    uint16_t bgFade256 = (elapsed < STARS_FADE_IN_MS)
+      ? (uint16_t)((elapsed * 256UL) / STARS_FADE_IN_MS)
+      : 256;
+    uint16_t pixel = 0;
+    uint16_t litCount = 0;
+    for (uint16_t b = 0; b < PIXEL_BYTES; b++) {
+      uint8_t pixel_byte = pgm_read_byte_near(starfield + b);
+      for (uint8_t bit = 0; bit < 8; bit++) {
+        if (pixel_byte & 0x01) {
+          if (litCount % DIPPER_BG_STAR_INTERVAL == 0) {
+            uint16_t phase = (now / TWINKLE_SPEED) + (pixel * 37);
+            uint8_t wave = fastCosineCalc(phase);
+            uint8_t brightness = DIPPER_BG_MIN_BRIGHTNESS + ((wave * (DIPPER_BG_MAX_BRIGHTNESS - DIPPER_BG_MIN_BRIGHTNESS)) >> 8);
+            brightness = (uint8_t)(((uint16_t)brightness * bgFade256) >> 8);
+            leds.setPixelColor(pixel, leds.Color(brightness, brightness, brightness));
+          }
+          litCount++;
+        }
+        pixel_byte >>= 1;
+        pixel++;
+      }
+    }
+  }
 
   // Phase 1: Render dipper_star1 (instant, full brightness)
   if (progress >= 0.0f) {
